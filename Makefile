@@ -37,7 +37,7 @@ bin/kernel.bin: $(KERNEL)
 # Run the disk image in QEMU
 # ----------------------------------------------------------------------
 run: $(IMG)
-	$(QEMU) -drive format=raw,file=$(IMG)
+	qemu-system-x86_64 -drive format=raw,file=norOS.img -serial stdio -d int,cpu_reset
 
 # ----------------------------------------------------------------------
 # Mark targets as phony to prevent conflicts with files of the same name

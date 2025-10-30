@@ -1,33 +1,84 @@
-org 0x7C00           ; Set the origin of the bootloader in memory (BIOS loads boot sector here)
-bits 16              ; We are in 16-bit real mode
+[org 0x7c00]
+KERNEL_LOCATION equ 0x1000
 
-Start:
-    cli              ; Clear interrupts while setting up
-    xor ax, ax       ; Zero out AX register
-    mov ds, ax       ; Set Data Segment (DS) to 0
-    mov es, ax       ; Set Extra Segment (ES) to 0
+BOOT_DISK: db 0
+mov [BOOT_DISK], dl
 
-    ; ------------------------------------------------
-    ; Load kernel from disk using BIOS interrupt 0x13
-    ; ------------------------------------------------
-    mov ah, 0x02     ; BIOS function 0x02: read sectors from disk
-    mov al, 1        ; Number of sectors to read = 1
-    mov ch, 0        ; Cylinder = 0
-    mov cl, 2        ; Sector = 2 (the kernel starts at sector 2)
-    mov dh, 0        ; Head = 0
-    mov dl, 0x80     ; Drive = 0x80 (first hard disk)
-    mov bx, 0x8000   ; Memory address to load the kernel (segment:offset = 0x0000:0x8000)
-    int 0x13         ; Call BIOS disk service
-    jc load_error    ; Jump to error if Carry Flag is set (disk read failed)
+xor ax, ax
+mov es, ax
+mov ds, ax
+mov bp, 0x8000
+mov sp, bp
 
-    ; Jump to the kernel code we just loaded
-    jmp 0x0000:0x8000
+mov bx, KERNEL_LOCATION
+mov dh, 20
 
-load_error:
-    hlt              ; Halt CPU if loading failed
+mov ah, 0x02
+mov al, dh
+mov ch, 0x00
+mov dh, 0x00
+mov cl, 0x02
+mov dl, [BOOT_DISK]
+int 0x13
 
-; ------------------------------------------------
-; Boot sector must be exactly 512 bytes
-; ------------------------------------------------
-times 510-($-$$) db 0 ; Fill the remaining space with zeros
-dw 0xAA55             ; Boot signature required by BIOS
+mov ah, 0x0
+mov al, 0x3
+int 0x10
+
+
+
+CODE_SEG equ GDT_code - GDT_start
+DATA_SEG equ GDT_data - GDT_start
+
+cli
+lgdt [GDT_descriptor]
+mov eax, cr0
+or eax, 1
+mov cr0, eax
+jmp CODE_SEG:start_protected_mode
+
+jmp $
+                                    
+GDT_start:
+    GDT_null:
+        dd 0x0
+        dd 0x0
+
+    GDT_code:
+        dw 0xffff
+        dw 0x0
+        db 0x0
+        db 0b10011010
+        db 0b11001111
+        db 0x0
+
+    GDT_data:
+        dw 0xffff
+        dw 0x0
+        db 0x0
+        db 0b10010010
+        db 0b11001111
+        db 0x0
+
+GDT_end:
+
+GDT_descriptor:
+    dw GDT_end - GDT_start - 1
+    dd GDT_start
+
+
+[bits 32]
+start_protected_mode:
+    mov ax, DATA_SEG
+	mov ds, ax
+	mov ss, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+	
+	mov ebp, 0x90000		; 32 bit stack base pointer
+	mov esp, ebp
+
+    jmp KERNEL_LOCATION
+times 510-($-$$) db 0
+dw 0xaa55
